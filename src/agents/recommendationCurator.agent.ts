@@ -1,13 +1,12 @@
 import OpenAI from "openai";
 import { Record } from "../data/inventory";
+import { createLLMClient } from "../llm/client";
 
 export const recommendationCuratorAgent = async (records: Record[]) => {
-  const client = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
+  const { client, model } = createLLMClient();
 
   const response = await client.responses.create({
-    model: "gpt-4o-mini",
+    model,
     input: `
 You are a record store assistant.
 Given these records, recommend them to a customer in a friendly tone.

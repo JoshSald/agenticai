@@ -1,20 +1,14 @@
 import OpenAI from "openai";
-
-export type TasteProfile = {
-  genres: string[];
-  era?: string;
-  similarArtists?: string[];
-};
+import { tasteProfileSchema, TasteProfile } from "../schemas/taste.schema";
+import { createLLMClient } from "../llm/client";
 
 export const tasteAnalyzerAgent = async (
   prompt: string,
 ): Promise<TasteProfile> => {
-  const client = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
+  const { client, model } = createLLMClient();
 
   const response = await client.responses.create({
-    model: "gpt-4o-mini",
+    model,
     input: `
 You MUST respond with valid JSON only.
 Do NOT include markdown.
@@ -34,9 +28,12 @@ User statement:
 
   const text = response.output_text;
 
+  let parsed: unknown;
   try {
-    return JSON.parse(text);
+    parsed = JSON.parse(text);
   } catch {
     throw new Error("TasteAnalyzer returned invalid JSON");
   }
+
+  return tasteProfileSchema.parse(parsed);
 };

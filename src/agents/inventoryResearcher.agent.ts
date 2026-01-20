@@ -1,5 +1,5 @@
 import { inventory } from "../data/inventory";
-import { TasteProfile } from "./tasteAnalyzer.agent";
+import { TasteProfile } from "../schemas/taste.schema";
 
 export const inventoryResearcherAgent = async (taste: TasteProfile) => {
   return inventory.filter((record) =>
