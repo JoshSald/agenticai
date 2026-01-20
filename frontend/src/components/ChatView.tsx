@@ -61,8 +61,8 @@ export default function ChatView() {
       const assistantMessage: ChatMessage = {
         id: Date.now() + 1,
         role: "assistant",
-        content: data.recommendations,
-        albums: data.matches,
+        content: data?.recommendations ?? "Hmm, something went wrong.",
+        albums: Array.isArray(data?.matches) ? data.matches : [],
       };
 
       setMessages((prev) => [...prev, assistantMessage]);

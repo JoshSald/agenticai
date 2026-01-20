@@ -4,38 +4,92 @@ import { fetchReleaseForAlbum } from "../tools/musicbrainz.tool";
 import { getCoverArtUrl } from "../tools/coverart.tool";
 import { recommendationCuratorAgent } from "./recommendationCurator.agent";
 import { refinerAgent } from "./refiner.agent";
+import {
+  ConversationState,
+  createInitialConversationState,
+} from "../conversation/conversationState";
+import { handleClarification } from "./handleClarification";
+import { hasEnoughTasteSignal } from "../conversation/hasEnoughTastesSignal";
+import { normalizeResponse } from "../helpers/normalizeResponse";
 
-export const orchestratorAgent = async (prompt: string) => {
-  const refined = await refinerAgent(prompt);
+export const orchestratorAgent = async (
+  prompt: string,
+  state?: ConversationState,
+) => {
+  const conversationState = state ?? createInitialConversationState();
 
-  if (refined.intent === "adult_off_topic" || refined.intent === "off_topic") {
-    return {
+  // 1️⃣ Handle clarification replies FIRST
+  if (conversationState.awaitingClarification) {
+    const clarificationResult = handleClarification(prompt, conversationState);
+
+    if (!hasEnoughTasteSignal(conversationState)) {
+      return normalizeResponse(clarificationResult);
+    }
+  }
+
+  // 2️⃣ Run refiner ONLY if taste is not known yet
+  let refined: Awaited<ReturnType<typeof refinerAgent>> | null = null;
+
+  if (!hasEnoughTasteSignal(conversationState)) {
+    refined = await refinerAgent(prompt);
+    refined.needsClarification ??= false;
+  }
+
+  // 3️⃣ Guardrails + SAFE RESPONSES
+  if (
+    refined &&
+    (refined.intent === "adult_off_topic" || refined.intent === "off_topic")
+  ) {
+    return normalizeResponse({
       tasteProfile: null,
       matches: [],
       recommendations:
         refined.safeResponse ??
         "Let’s keep things musical. Tell me about an artist or album you love.",
-    };
+      state: conversationState,
+    });
   }
 
-  if (refined.intent === "pricing") {
-    return {
+  if (refined && refined.intent === "pricing") {
+    return normalizeResponse({
       tasteProfile: null,
       matches: [],
       recommendations:
-        "I can’t help with free albums, discounts, or pricing, but I’d love to help you discover music you’ll enjoy.",
-    };
+        "I can’t help with pricing, but I’d love to help you discover music you’ll enjoy.",
+      state: conversationState,
+    });
   }
 
-  if (refined.needsClarification) {
-    return {
+  // 🔴 CRITICAL FIX: if refiner already answered, STOP HERE
+  if (refined && refined.safeResponse) {
+    return normalizeResponse({
+      tasteProfile: null,
+      matches: [],
+      recommendations: refined.safeResponse,
+      state: conversationState,
+    });
+  }
+
+  // 4️⃣ Ask clarification only if still required
+  if (
+    refined &&
+    refined.needsClarification === true &&
+    !hasEnoughTasteSignal(conversationState)
+  ) {
+    conversationState.awaitingClarification = true;
+    conversationState.lastClarification = refined.clarifyingQuestion;
+
+    return normalizeResponse({
       tasteProfile: null,
       matches: [],
       recommendations: refined.clarifyingQuestion,
-    };
+      state: conversationState,
+    });
   }
 
-  const tasteProfile = await tasteAnalyzerAgent(prompt);
+  // 5️⃣ Taste-based flow (SAFE now)
+  const tasteProfile = await tasteAnalyzerAgent(prompt, conversationState);
+
   const matches = inventoryLookupTool(tasteProfile);
 
   const enrichedMatches = await Promise.all(
@@ -49,12 +103,22 @@ export const orchestratorAgent = async (prompt: string) => {
       };
     }),
   );
-
+  if (enrichedMatches.length === 0) {
+    return normalizeResponse({
+      tasteProfile,
+      matches: [],
+      recommendations:
+        "I don’t currently have albums in stock that perfectly match this taste, but I can recommend similar artists or explore nearby styles if you want.",
+      state: conversationState,
+    });
+  }
   const recommendations = await recommendationCuratorAgent(enrichedMatches);
 
-  return {
+  // 6️⃣ Final response
+  return normalizeResponse({
     tasteProfile,
     matches: enrichedMatches,
     recommendations,
-  };
+    state: conversationState,
+  });
 };

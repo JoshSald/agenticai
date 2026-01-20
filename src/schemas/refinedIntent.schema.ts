@@ -8,7 +8,7 @@ export const refinedIntentSchema = z.object({
     "off_topic",
     "adult_off_topic",
   ]),
-  needsClarification: z.boolean(),
+  needsClarification: z.boolean().optional().default(false),
   clarifyingQuestion: z.string().optional(),
   safeResponse: z.string().optional(),
 });
