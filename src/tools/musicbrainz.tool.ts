@@ -2,18 +2,18 @@ import axios from "axios";
 
 const BASE_URL = "https://musicbrainz.org/ws/2";
 
-export type ArtistInfo = {
-  name: string;
-  country?: string;
-  disambiguation?: string;
+export type ReleaseInfo = {
+  id: string;
+  title: string;
 };
 
-export const fetchArtistInfo = async (
-  artistName: string,
-): Promise<ArtistInfo | null> => {
-  const response = await axios.get(`${BASE_URL}/artist`, {
+export const fetchReleaseForAlbum = async (
+  artist: string,
+  album: string,
+): Promise<ReleaseInfo | null> => {
+  const response = await axios.get(`${BASE_URL}/release`, {
     params: {
-      query: `artist:${artistName}`,
+      query: `artist:${artist} AND release:${album}`,
       fmt: "json",
       limit: 1,
     },
@@ -22,13 +22,11 @@ export const fetchArtistInfo = async (
     },
   });
 
-  const artist = response.data.artists?.[0];
-
-  if (!artist) return null;
+  const release = response.data.releases?.[0];
+  if (!release) return null;
 
   return {
-    name: artist.name,
-    country: artist.country,
-    disambiguation: artist.disambiguation,
+    id: release.id,
+    title: release.title,
   };
 };
