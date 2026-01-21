@@ -12,8 +12,12 @@ router.post(
   guardrail,
   async (req, res, next) => {
     try {
-      const result = await orchestratorAgent(req.body.prompt);
-      res.json(result);
+      const result = await orchestratorAgent(req.body.prompt, req.body.state);
+      res.status(200).json({
+        recommendations: result?.recommendations ?? "",
+        matches: Array.isArray(result?.matches) ? result.matches : [],
+        state: result?.state ?? null,
+      });
     } catch (err) {
       next(err);
     }
