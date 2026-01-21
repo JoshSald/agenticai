@@ -37,19 +37,37 @@ function extractJsonObject(text: string): unknown {
 
   let jsonText = cleaned.slice(start, end + 1);
 
-  // ✅ Normalize broken newlines inside strings
   jsonText = jsonText
-    .replace(/\\\r?\n/g, "\\n") // escaped line breaks
+    .replace(/\\\r?\n/g, "\\n")
     .replace(/\r/g, "")
     .replace(/\t/g, "\\t");
 
-  // ✅ CRITICAL FIX: remove trailing commas (LLMs love these)
+  jsonText = jsonText.replace(/";(\s*")/g, '",\n  $1');
+
   jsonText = jsonText.replace(/,\s*([}\]])/g, "$1");
+
+  jsonText = jsonText.replace(
+    /("(?:[^"\\]|\\.)*")\s*:\s*([a-zA-Z][^,}]*?)(?=\s*[,}])/g,
+    (match, key, value) => {
+      if (
+        value.trim().startsWith('"') ||
+        value.trim().startsWith("{") ||
+        value.trim().startsWith("[") ||
+        value.trim() === "null" ||
+        value.trim() === "true" ||
+        value.trim() === "false" ||
+        /^\d/.test(value.trim())
+      ) {
+        return match;
+      }
+      return `${key}: "${value.trim()}"`;
+    },
+  );
 
   try {
     return JSON.parse(jsonText);
   } catch (err) {
-    console.error("❌ RefinerAgent JSON parse failed:");
+    console.error("RefinerAgent JSON parse failed:");
     console.error(jsonText);
     throw err;
   }
@@ -79,6 +97,11 @@ You are an intent classification and safety refiner agent for a music record sto
 You DO NOT answer the user.
 You ONLY classify intent and optionally provide a safe response.
 
+If the user gives a short affirmation ("yes", "yes please", "sure", "okay", "go ahead", "sounds good"):
+- intent = "taste_recommendation"
+- needsClarification = false
+- safeResponse = a warm, concise nudge to share an artist, record, or vibe they like (1 sentence, no markdown)
+
 ${knownTaste}
 
 Latest user input:
@@ -93,13 +116,17 @@ Return JSON ONLY in this exact shape:
   "clarifyingQuestion"?: string
 }
 
-CRITICAL RULE:
-If the user mentions a specific artist by name (e.g. "Sigur Rós"):
-- intent MUST be "taste_recommendation"
-- needsClarification MUST be false
+CRITICAL RULES - NEVER ASK CLARIFYING QUESTIONS IF:
+1. User mentions a SPECIFIC ARTIST by name (e.g. "I love Sigrid", "into The National", "checking out Radiohead")
+2. User mentions a SPECIFIC ALBUM (e.g. "Wish You Were Here", "OK Computer")
+3. User mentions a SPECIFIC GENRE EXPLICITLY (e.g. "synthwave", "indie folk", "post-rock")
+4. User asks for recommendations or similar artists
+
+In ALL of these cases:
+- intent = "taste_recommendation"
+- needsClarification = ALWAYS false
 - DO NOT ask questions
-- DO NOT generalize the genre
-- Assume the user wants similar artists
+- DO NOT ask for clarification
 
 Rules:
 - Respond with JSON ONLY. No markdown. No explanations.
@@ -111,15 +138,14 @@ Rules:
   → needsClarification = false
 - If the user explicitly rejects a genre (e.g. "I'm not into electronic music"):
   → intent = "taste_recommendation"
+  → needsClarification = false
   → DO NOT suggest the rejected genre again
-- Only set needsClarification = true if critical information is missing
+- AMBIGUOUS cases only (e.g. "I like dark stuff" with no artist/genre) = ask for clarification
+- When in doubt, set needsClarification = false and recommend based on what you know
 
 IMPORTANT:
-If the user has already mentioned a specific artist or genre,
-DO NOT ask clarifying questions.
-Set "needsClarification" to false.
-
-The refiner must be consistent across turns.
+ALWAYS prefer needsClarification = false.
+Only set to true for truly ambiguous requests with ZERO artist/genre mentions.
 `,
   });
 
@@ -138,6 +164,42 @@ The refiner must be consistent across turns.
   } catch (err) {
     console.error("RefinerAgent raw text:", rawText);
     throw new Error("RefinerAgent returned invalid JSON");
+  }
+  // Normalize/patch malformed outputs from LLM
+  if (typeof parsed === "object" && parsed !== null) {
+    const obj = parsed as Record<string, unknown>;
+
+    // Intent: default to taste_recommendation if missing/invalid
+    const intent = typeof obj.intent === "string" ? obj.intent : "";
+    const allowed = [
+      "taste_recommendation",
+      "discovery",
+      "pricing",
+      "off_topic",
+      "adult_off_topic",
+    ];
+    if (!allowed.includes(intent)) {
+      obj.intent = "taste_recommendation";
+    }
+
+    // needsClarification: default false
+    if (typeof obj.needsClarification !== "boolean") {
+      obj.needsClarification = false;
+    }
+
+    // Drop empty strings/nulls for safeResponse/clarifyingQuestion
+    if (
+      typeof obj.safeResponse !== "string" ||
+      obj.safeResponse.trim() === ""
+    ) {
+      delete obj.safeResponse;
+    }
+    if (
+      typeof obj.clarifyingQuestion !== "string" ||
+      obj.clarifyingQuestion.trim() === ""
+    ) {
+      delete obj.clarifyingQuestion;
+    }
   }
 
   return refinedIntentSchema.parse(parsed);

@@ -6,6 +6,15 @@ export type AlbumMatch = {
   coverArt?: string;
 };
 
+export type ConversationState = {
+  likedArtists: string[];
+  confirmedGenres: string[];
+  excludedGenres: string[];
+  awaitingClarification: boolean;
+  lastClarification?: string;
+  activeArtist?: string;
+};
+
 export type AgentResponse = {
   tasteProfile: {
     genres: string[];
@@ -14,4 +23,5 @@ export type AgentResponse = {
   };
   matches: AlbumMatch[];
   recommendations: string;
+  state?: ConversationState;
 };

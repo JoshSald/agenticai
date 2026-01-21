@@ -13,7 +13,7 @@ export function normalizeResponse(input: NormalizeInput) {
     recommendations:
       input.recommendations ??
       input.safeResponse ??
-      "Tell me about an artist or album you love.",
+      "Tell me about an artist or record you're into right now and I'll line up something you'll vibe with.",
     state: input.state,
   };
 }

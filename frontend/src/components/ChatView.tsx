@@ -14,13 +14,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ArrowUp } from "lucide-react";
-import type { AgentResponse } from "../types";
+import type { AgentResponse, ConversationState } from "../types";
 
 type Album = {
   artist: string;
   album: string;
   era?: string;
   coverArt?: string;
+  available?: boolean;
 };
 
 type ChatMessage = {
@@ -34,6 +35,9 @@ export default function ChatView() {
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
+  const [conversationState, setConversationState] = useState<
+    ConversationState | undefined
+  >(undefined);
   const variant = "loading-dots"; // Loader Variant
 
   const sendPrompt = async () => {
@@ -53,10 +57,18 @@ export default function ChatView() {
       const res = await fetch("http://localhost:3000/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: userMessage.content }),
+        body: JSON.stringify({
+          prompt: userMessage.content,
+          state: conversationState,
+        }),
       });
 
       const data: AgentResponse = await res.json();
+
+      // Update conversation state from response
+      if (data?.state) {
+        setConversationState(data.state);
+      }
 
       const assistantMessage: ChatMessage = {
         id: Date.now() + 1,
@@ -114,17 +126,24 @@ export default function ChatView() {
                             key={`${album.artist}-${album.album}`}
                             className="rounded-lg bg-neutral-800 p-2 shadow-sm"
                           >
-                            {album.coverArt ? (
-                              <img
-                                src={album.coverArt}
-                                alt={album.album}
-                                className="mb-2 aspect-square w-full rounded-md object-cover"
-                              />
-                            ) : (
-                              <div className="mb-2 aspect-square w-full rounded-md bg-neutral-700 flex items-center justify-center text-xs text-neutral-300">
-                                No cover
-                              </div>
-                            )}
+                            <div className="relative mb-2">
+                              {album.coverArt ? (
+                                <img
+                                  src={album.coverArt}
+                                  alt={album.album}
+                                  className="aspect-square w-full rounded-md object-cover"
+                                />
+                              ) : (
+                                <div className="aspect-square w-full rounded-md bg-neutral-700 flex items-center justify-center text-xs text-neutral-300">
+                                  No cover
+                                </div>
+                              )}
+                              {album.available && (
+                                <div className="absolute top-2 left-2 bg-green-600 text-white text-xs font-semibold px-2 py-1 rounded-md shadow-lg">
+                                  In Stock
+                                </div>
+                              )}
+                            </div>
 
                             <div className="text-sm font-semibold text-white leading-tight">
                               {album.album}
@@ -187,11 +206,11 @@ export default function ChatView() {
         >
           <PromptInputTextarea
             placeholder="Tell me what music you like…"
-            className="min-h-[44px] text-white placeholder:text-neutral-400"
+            className="min-h-11 text-white placeholder:text-neutral-400"
           />
 
           <PromptInputActions className="flex justify-end px-2 pb-2">
-            <PromptInputAction>
+            <PromptInputAction tooltip="Send">
               <Button
                 size="icon"
                 disabled={!prompt.trim() || loading}

@@ -3,10 +3,25 @@ import { TasteProfile } from "../schemas/taste.schema";
 import { inferPrimaryGenre } from "../helpers/inferGenre";
 
 export const inventoryLookupTool = (taste: TasteProfile): Record[] => {
-  const tastePrimary = inferPrimaryGenre(taste.genres).toLowerCase();
+  if (!taste || !Array.isArray(taste.genres) || taste.genres.length === 0) {
+    return [];
+  }
 
-  return inventory.filter((record) => {
-    const recordPrimary = inferPrimaryGenre(record.genre).toLowerCase();
-    return recordPrimary === tastePrimary;
+  const inferred = inferPrimaryGenre(taste.genres);
+
+  if (!inferred || typeof inferred !== "string") {
+    return [];
+  }
+
+  const tastePrimary = inferred.toLowerCase();
+
+  const matches = inventory.filter((record) => {
+    const recordPrimary = inferPrimaryGenre(record.genre);
+    return (
+      typeof recordPrimary === "string" &&
+      recordPrimary.toLowerCase() === tastePrimary
+    );
   });
+
+  return matches;
 };

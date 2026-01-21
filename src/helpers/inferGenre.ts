@@ -1,7 +1,6 @@
 export function inferPrimaryGenre(genres: string[]): string {
   const lowered = genres.map((g) => g.toLowerCase());
 
-  // Explicit high-level buckets only
   if (lowered.includes("post-rock")) return "post-rock";
 
   if (
@@ -13,22 +12,31 @@ export function inferPrimaryGenre(genres: string[]): string {
     return "rock";
   }
 
-  // Electronic is electronic, period
   if (
     lowered.includes("electronic") ||
     lowered.includes("idm") ||
     lowered.includes("trip hop") ||
     lowered.includes("synth pop") ||
+    lowered.includes("synth-pop") ||
+    lowered.includes("electronic pop") ||
     lowered.includes("house")
   ) {
     return "electronic";
   }
 
-  // Ambient-only records (rare in your inventory)
+  if (
+    lowered.includes("metal") ||
+    lowered.includes("thrash metal") ||
+    lowered.includes("power metal") ||
+    lowered.includes("progressive metal") ||
+    lowered.includes("death metal")
+  ) {
+    return "metal";
+  }
+
   if (lowered.length === 1 && lowered[0] === "ambient") {
     return "ambient";
   }
 
-  // Safe fallback
   return lowered[0];
 }
